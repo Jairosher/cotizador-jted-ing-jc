@@ -19,12 +19,10 @@
 
     // =========================================================================
     // 1. CONFIGURACIÓN DE CONEXIÓN A GOOGLE SHEETS
-    // Reemplaza "TU_SHEET_ID_AQUI" con el ID de tu hoja de cálculo pública.
-    // Mientras tenga "TU_SHEET_ID_AQUI", usará los datos de Noviembre 2026 precargados.
     // =========================================================================
     const SHEET_ID = "1sxgV7kpbdx2y4BoJKfeF7Fu8CPrvmKZO9YqFiJhgyqg";
 
-    // Datos de respaldo exactos extraídos de tu Excel de Noviembre 2026
+    // Datos de respaldo (solo se usan si tu Google Sheet está vacío)
     const FALLBACK_PARAMS = {
       vigencia: "Del 04 al 30 de noviembre de 2026",
       tasa_regular: 15.79,
@@ -58,7 +56,6 @@
       { plan: "PLAN EMPRESA EJECUTIVO 80GB", codigo: "400115", tarifa: 32.00, cbm: 2, equipo_diferido: "SI", tipo: "CORPORATIVO", observaciones: "CBM 2 meses" }
     ];
 
-    // Función auxiliar de clasificación de Gama (idéntica a tu fórmula de Excel)
     function calcularGama(pvpPospago) {
       const p = Number(pvpPospago) || 0;
       if (p <= 80) return "MUY BAJA";
@@ -73,32 +70,31 @@
     }
 
     function App() {
-      const [tab, setTab] = useState("cotizador"); // 'cotizador' | 'catalogo' | 'planes'
+      const [tab, setTab] = useState("cotizador");
       const [loading, setLoading] = useState(false);
-      const [fuenteDatos, setFuenteDatos] = useState("LOCAL (Nov 2026)");
+      const [fuenteDatos, setFuenteDatos] = useState("CONECTANDO...");
 
-      // Estados de datos
       const [params, setParams] = useState(FALLBACK_PARAMS);
       const [equipos, setEquipos] = useState(FALLBACK_EQUIPOS);
       const [planes, setPlanes] = useState(FALLBACK_PLANES);
 
-      // Estados del Cotizador
-      const [modalidadCotizador, setModalidadCotizador] = useState("REGULAR"); // 'REGULAR' | 'DINERS'
-      const [cliente, setCliente] = useState("MASIVO"); // 'MASIVO' | 'CORPORATIVO'
-      const [tipoVenta, setTipoVenta] = useState("DIFERIDO CNT"); // 'DIFERIDO CNT' | 'ROL DE PAGOS'
+      const [modalidadCotizador, setModalidadCotizador] = useState("REGULAR");
+      const [cliente, setCliente] = useState("MASIVO");
+      const [tipoVenta, setTipoVenta] = useState("DIFERIDO CNT");
       const [smartflexSeleccionado, setSmartflexSeleccionado] = useState(FALLBACK_EQUIPOS[0].codigo_smartflex);
       const [codigoPlanSeleccionado, setCodigoPlanSeleccionado] = useState(FALLBACK_PLANES[1].codigo);
       const [abono, setAbono] = useState(0);
       const [plazo, setPlazo] = useState(12);
 
-      // Estados de Filtros del Catálogo
       const [busqueda, setBusqueda] = useState("");
       const [filtroMarca, setFiltroMarca] = useState("TODAS");
       const [filtroGama, setFiltroGama] = useState("TODAS");
 
-      // Carga automática desde Google Sheets vía Opensheet API
       useEffect(() => {
-        if (!SHEET_ID || SHEET_ID === "TU_SHEET_ID_AQUI") return;
+        if (!SHEET_ID || SHEET_ID === "TU_SHEET_ID_AQUI") {
+          setFuenteDatos("LOCAL (SIN SHEET_ID)");
+          return;
+        }
 
         async function cargarGoogleSheets() {
           setLoading(true);
@@ -109,6 +105,13 @@
               fetch(`https://opensheet.elk.sh/${SHEET_ID}/parametros`).then(r => r.json())
             ]);
 
+            if (resEq.error || resPl.error || resPa.error) {
+              setFuenteDatos("ERROR DE PERMISOS O NOMBRE DE PESTAÑA");
+              return;
+            }
+
+            let cargoAlgo = false;
+
             if (Array.isArray(resEq) && resEq.length > 0) {
               const eqLimpios = resEq
                 .filter(e => String(e.activo || "SI").toUpperCase() === "SI" && e.modelo)
@@ -118,8 +121,11 @@
                   pvp_pospago_sin_iva: parseFloat(String(e.pvp_pospago_sin_iva).replace(",", ".")) || 0,
                   pvp_empresa_sin_iva: parseFloat(String(e.pvp_empresa_sin_iva).replace(",", ".")) || 0,
                 }));
-              setEquipos(eqLimpios);
-              if (eqLimpios[0]) setSmartflexSeleccionado(eqLimpios[0].codigo_smartflex);
+              if (eqLimpios.length > 0) {
+                setEquipos(eqLimpios);
+                setSmartflexSeleccionado(eqLimpios[0].codigo_smartflex);
+                cargoAlgo = true;
+              }
             }
 
             if (Array.isArray(resPl) && resPl.length > 0) {
@@ -130,8 +136,11 @@
                   tarifa: parseFloat(String(p.tarifa).replace(",", ".")) || 0,
                   cbm: parseFloat(String(p.cbm).replace(",", ".")) || 0,
                 }));
-              setPlanes(plLimpios);
-              if (plLimpios[0]) setCodigoPlanSeleccionado(plLimpios[0].codigo);
+              if (plLimpios.length > 0) {
+                setPlanes(plLimpios);
+                setCodigoPlanSeleccionado(plLimpios[0].codigo);
+                cargoAlgo = true;
+              }
             }
 
             if (Array.isArray(resPa) && resPa.length > 0) {
@@ -145,11 +154,13 @@
                 tasa_diners: parseFloat(mapParams.tasa_diners) || FALLBACK_PARAMS.tasa_diners,
                 iva: parseFloat(mapParams.iva) || FALLBACK_PARAMS.iva,
               });
+              cargoAlgo = true;
             }
 
-            setFuenteDatos("GOOGLE SHEETS EN VIVO");
+            setFuenteDatos(cargoAlgo ? "GOOGLE SHEETS EN VIVO" : "SHEET VACÍO (USANDO RESPALDO)");
           } catch (err) {
-            console.error("Error cargando Google Sheets, usando respaldo local:", err);
+            console.error("Error cargando Google Sheets:", err);
+            setFuenteDatos("ERROR DE CONEXIÓN (USANDO RESPALDO)");
           } finally {
             setLoading(false);
           }
@@ -158,7 +169,6 @@
         cargarGoogleSheets();
       }, []);
 
-      // Sincronizar plan por defecto al cambiar tipo de cliente
       useEffect(() => {
         const planesFiltrados = planes.filter(p => String(p.tipo).toUpperCase() === cliente);
         if (planesFiltrados.length > 0 && !planesFiltrados.some(p => p.codigo === codigoPlanSeleccionado)) {
@@ -166,7 +176,6 @@
         }
       }, [cliente, planes]);
 
-      // Equipo y Plan activos en el cotizador
       const equipoActual = useMemo(
         () => equipos.find(e => String(e.codigo_smartflex) === String(smartflexSeleccionado)) || equipos[0],
         [equipos, smartflexSeleccionado]
@@ -182,9 +191,6 @@
         [planesDisponibles, codigoPlanSeleccionado]
       );
 
-      // =========================================================================
-      // MOTOR DE CÁLCULO FINANCIERO (EQUIVALENTE EXACTO A COTIZADOR REGULAR & DINERS)
-      // =========================================================================
       const resultadoCotizacion = useMemo(() => {
         if (!equipoActual) return null;
 
@@ -193,7 +199,6 @@
         const tasaAnual = esDiners ? Number(params.tasa_diners) : Number(params.tasa_regular);
         const interesMensual = Math.pow(tasaAnual / 100 + 1, 1 / 12) - 1;
 
-        // 1. Determinación del PVP sin IVA según cliente y modalidad
         let precioSinIva = equipoActual.pvp_pospago_sin_iva;
         if (!esDiners && cliente === "MASIVO" && tipoVenta === "ROL DE PAGOS") {
           precioSinIva = equipoActual.pvp_prepago_sin_iva;
@@ -201,13 +206,11 @@
           precioSinIva = equipoActual.pvp_empresa_sin_iva;
         }
 
-        // 2. Precio con IVA y descuentos (Abono + CBM Corporativo)
         const precioConIva = precioSinIva * (1 + iva);
         const abonoNum = Math.max(0, Number(abono) || 0);
         const descuentoCbm = esDiners ? 0 : (Number(planActual.tarifa) * Number(planActual.cbm));
         const saldoFinanciar = Math.max(0, precioConIva - abonoNum - descuentoCbm);
 
-        // 3. Cuota mensual del equipo (con IVA) - Regla > 6 meses con interés
         let cuotaEquipoConIva = 0;
         if (plazo > 6) {
           const factor = Math.pow(1 + interesMensual, plazo);
@@ -216,7 +219,6 @@
           cuotaEquipoConIva = Number((saldoFinanciar / plazo).toFixed(2));
         }
 
-        // 4. Desglose completo
         const cuotaEquipoSinIva = cuotaEquipoConIva / (1 + iva);
         const planConIva = Number(planActual.tarifa) * (1 + iva);
         const cuotaTotalSinIva = cuotaEquipoSinIva + Number(planActual.tarifa);
@@ -240,7 +242,6 @@
         };
       }, [equipoActual, planActual, modalidadCotizador, cliente, tipoVenta, abono, plazo, params]);
 
-      // Filtros de Catálogo
       const marcasUnicas = useMemo(() => ["TODAS", ...new Set(equipos.map(e => e.marca))], [equipos]);
       const equiposFiltrados = useMemo(() => {
         return equipos.filter(eq => {
@@ -268,7 +269,7 @@
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`text-xs px-3 py-1 rounded-full font-medium ${fuenteDatos.includes("LIVE") || fuenteDatos.includes("VIVO") ? "bg-emerald-500/20 text-emerald-200 border border-emerald-400/30" : "bg-amber-500/20 text-amber-200 border border-amber-400/30"}`}>
+                <span className={`text-xs px-3 py-1 rounded-full font-medium ${fuenteDatos === "GOOGLE SHEETS EN VIVO" ? "bg-emerald-500/20 text-emerald-200 border border-emerald-400/30" : "bg-amber-500/20 text-amber-200 border border-amber-400/30"}`}>
                   {loading ? "Sincronizando..." : fuenteDatos}
                 </span>
               </div>
@@ -325,7 +326,6 @@
                     </div>
                   </div>
 
-                  {/* Tipo de Cliente y Tipo de Venta */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">Tipo de Cliente</label>
@@ -355,7 +355,6 @@
                     )}
                   </div>
 
-                  {/* Selección de Equipo */}
                   <div>
                     <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">Equipo Terminal</label>
                     <select
@@ -376,7 +375,6 @@
                     </div>
                   </div>
 
-                  {/* Selección de Plan */}
                   <div>
                     <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">Plan Tarifario ({cliente})</label>
                     <select
@@ -392,7 +390,6 @@
                     </select>
                   </div>
 
-                  {/* Abono Inicial y Plazo */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                     <div>
                       <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">Abono Inicial (USD inc. IVA)</label>
