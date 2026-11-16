@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Catálogo y Cotizador de Equipos</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & Babel -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    // =========================================================================
+    // 1. CONFIGURACIÓN DE CONEXIÓN A GOOGLE SHEETS
+    // Reemplaza "TU_SHEET_ID_AQUI" con el ID de tu hoja de cálculo pública.
+    // Mientras tenga "TU_SHEET_ID_AQUI", usará los datos de Noviembre 2026 precargados.
+    // =========================================================================
+    const SHEET_ID = "https://docs.google.com/spreadsheets/d/1sxgV7kpbdx2y4BoJKfeF7Fu8CPrvmKZO9YqFiJhgyqg/edit?usp=sharing";
+
+    // Datos de respaldo exactos extraídos de tu Excel de Noviembre 2026
+    const FALLBACK_PARAMS = {
+      vigencia: "Del 04 al 30 de noviembre de 2026",
+      tasa_regular: 15.79,
+      tasa_diners: 8.25,
+      iva: 0.15
+    };
+
+    const FALLBACK_EQUIPOS = [
+      { codigo_smartflex: "3368", tecnologia: "LTE / 5G", codigo_sap: "40018536 / 40018537", marca: "APPLE", categoria: "SMARTPHONE", modelo: "APPLE IPHONE 17 PRO MAX (A3526)", pvp_prepago_sin_iva: 1860.87, pvp_pospago_sin_iva: 1730.43, pvp_empresa_sin_iva: 1730.43, observacion: "OFERTA VIGENTE", activo: "SI" },
+      { codigo_smartflex: "3370", tecnologia: "LTE / 5G", codigo_sap: "40018538 / 40018539", marca: "APPLE", categoria: "SMARTPHONE", modelo: "APPLE IPHONE 17 PRO (A3523)", pvp_prepago_sin_iva: 1713.04, pvp_pospago_sin_iva: 1591.30, pvp_empresa_sin_iva: 1591.30, observacion: "OFERTA VIGENTE", activo: "SI" },
+      { codigo_smartflex: "3367", tecnologia: "LTE / 5G", codigo_sap: "40018540 / 40018541", marca: "APPLE", categoria: "SMARTPHONE", modelo: "APPLE IPHONE 17 (A3520)", pvp_prepago_sin_iva: 1217.39, pvp_pospago_sin_iva: 1130.43, pvp_empresa_sin_iva: 1130.43, observacion: "OFERTA VIGENTE", activo: "SI" },
+      { codigo_smartflex: "3331", tecnologia: "LTE", codigo_sap: "40018298", marca: "HONOR", categoria: "SMARTPHONE", modelo: "HONOR 400 LITE 5G", pvp_prepago_sin_iva: 329.57, pvp_pospago_sin_iva: 277.39, pvp_empresa_sin_iva: 277.39, observacion: "OFERTA VIGENTE", activo: "SI" },
+      { codigo_smartflex: "3351", tecnologia: "LTE", codigo_sap: "40018357", marca: "HONOR", categoria: "SMARTPHONE", modelo: "HONOR X7C (ALT-LX3)", pvp_prepago_sin_iva: 199.13, pvp_pospago_sin_iva: 164.35, pvp_empresa_sin_iva: 164.35, observacion: "NUEVOS EQUIPOS", activo: "SI" },
+      { codigo_smartflex: "3364", tecnologia: "LTE", codigo_sap: "40018508", marca: "HONOR", categoria: "SMARTPHONE", modelo: "HONOR X6C (NIC-LX3)", pvp_prepago_sin_iva: 146.96, pvp_pospago_sin_iva: 120.87, pvp_empresa_sin_iva: 120.87, observacion: "NUEVOS EQUIPOS", activo: "SI" },
+      { codigo_smartflex: "3353", tecnologia: "LTE", codigo_sap: "40018377", marca: "MOTOROLA", categoria: "SMARTPHONE", modelo: "MOTOROLA MOTO G05 (XT2523-2)", pvp_prepago_sin_iva: 129.57, pvp_pospago_sin_iva: 103.48, pvp_empresa_sin_iva: 103.48, observacion: "NUEVOS EQUIPOS", activo: "SI" },
+      { codigo_smartflex: "3328", tecnologia: "LTE", codigo_sap: "40018287", marca: "SAMSUNG", categoria: "SMARTPHONE", modelo: "SAMSUNG GALAXY A06 64GB (SM-A065M/DS)", pvp_prepago_sin_iva: 112.17, pvp_pospago_sin_iva: 94.78, pvp_empresa_sin_iva: 94.78, observacion: "OFERTA VIGENTE", activo: "SI" },
+      { codigo_smartflex: "3329", tecnologia: "LTE", codigo_sap: "40018288", marca: "SAMSUNG", categoria: "SMARTPHONE", modelo: "SAMSUNG GALAXY A16 128GB (SM-A165M/DS)", pvp_prepago_sin_iva: 181.74, pvp_pospago_sin_iva: 155.65, pvp_empresa_sin_iva: 155.65, observacion: "OFERTA VIGENTE", activo: "SI" },
+      { codigo_smartflex: "3330", tecnologia: "LTE / 5G", codigo_sap: "40018289", marca: "SAMSUNG", categoria: "SMARTPHONE", modelo: "SAMSUNG GALAXY A36 5G 256GB (SM-A366E/DS)", pvp_prepago_sin_iva: 390.43, pvp_pospago_sin_iva: 329.57, pvp_empresa_sin_iva: 329.57, observacion: "OFERTA VIGENTE", activo: "SI" },
+      { codigo_smartflex: "3333", tecnologia: "LTE / 5G", codigo_sap: "40018307", marca: "SAMSUNG", categoria: "SMARTPHONE", modelo: "SAMSUNG GALAXY A56 5G 256GB (SM-A566E/DS)", pvp_prepago_sin_iva: 494.78, pvp_pospago_sin_iva: 425.22, pvp_empresa_sin_iva: 425.22, observacion: "OFERTA VIGENTE", activo: "SI" },
+      { codigo_smartflex: "3336", tecnologia: "LTE / 5G", codigo_sap: "40018310", marca: "SAMSUNG", categoria: "SMARTPHONE", modelo: "SAMSUNG GALAXY S25 ULTRA 512GB (SM-S938B/DS)", pvp_prepago_sin_iva: 1529.57, pvp_pospago_sin_iva: 1303.48, pvp_empresa_sin_iva: 1303.48, observacion: "OFERTA VIGENTE", activo: "SI" },
+      { codigo_smartflex: "3356", tecnologia: "LTE", codigo_sap: "40018389", marca: "XIAOMI", categoria: "SMARTPHONE", modelo: "XIAOMI REDMI NOTE 14 256GB", pvp_prepago_sin_iva: 225.22, pvp_pospago_sin_iva: 190.43, pvp_empresa_sin_iva: 190.43, observacion: "NUEVOS EQUIPOS", activo: "SI" }
+    ];
+
+    const FALLBACK_PLANES = [
+      { plan: "PLAN MOVIL ESENCIAL 10GB", codigo: "300531", tarifa: 12.99, cbm: 0, equipo_diferido: "SI", tipo: "MASIVO", observaciones: "Aplica diferido regular" },
+      { plan: "PLAN MOVIL PLUS 25GB", codigo: "300533", tarifa: 17.99, cbm: 0, equipo_diferido: "SI", tipo: "MASIVO", observaciones: "Aplica diferido regular" },
+      { plan: "PLAN MOVIL PRO 50GB", codigo: "300535", tarifa: 24.99, cbm: 0, equipo_diferido: "SI", tipo: "MASIVO", observaciones: "Aplica diferido regular" },
+      { plan: "PLAN MOVIL ILIMITADO", codigo: "300537", tarifa: 34.99, cbm: 0, equipo_diferido: "SI", tipo: "MASIVO", observaciones: "Aplica diferido regular" },
+      { plan: "PLAN EMPRESA CONECTA 20GB", codigo: "400110", tarifa: 16.00, cbm: 1, equipo_diferido: "SI", tipo: "CORPORATIVO", observaciones: "CBM 1 mes" },
+      { plan: "PLAN EMPRESA NEGOCIOS 45GB", codigo: "400112", tarifa: 22.00, cbm: 1.5, equipo_diferido: "SI", tipo: "CORPORATIVO", observaciones: "CBM 1.5 meses" },
+      { plan: "PLAN EMPRESA EJECUTIVO 80GB", codigo: "400115", tarifa: 32.00, cbm: 2, equipo_diferido: "SI", tipo: "CORPORATIVO", observaciones: "CBM 2 meses" }
+    ];
+
+    // Función auxiliar de clasificación de Gama (idéntica a tu fórmula de Excel)
+    function calcularGama(pvpPospago) {
+      const p = Number(pvpPospago) || 0;
+      if (p <= 80) return "MUY BAJA";
+      if (p <= 200) return "BAJA";
+      if (p <= 400) return "MEDIA";
+      if (p <= 680) return "ALTA";
+      return "PREMIUM";
+    }
+
+    function formatCurrency(val) {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(val) || 0);
+    }
+
+    function App() {
+      const [tab, setTab] = useState("cotizador"); // 'cotizador' | 'catalogo' | 'planes'
+      const [loading, setLoading] = useState(false);
+      const [fuenteDatos, setFuenteDatos] = useState("LOCAL (Nov 2026)");
+
+      // Estados de datos
+      const [params, setParams] = useState(FALLBACK_PARAMS);
+      const [equipos, setEquipos] = useState(FALLBACK_EQUIPOS);
+      const [planes, setPlanes] = useState(FALLBACK_PLANES);
+
+      // Estados del Cotizador
+      const [modalidadCotizador, setModalidadCotizador] = useState("REGULAR"); // 'REGULAR' | 'DINERS'
+      const [cliente, setCliente] = useState("MASIVO"); // 'MASIVO' | 'CORPORATIVO'
+      const [tipoVenta, setTipoVenta] = useState("DIFERIDO CNT"); // 'DIFERIDO CNT' | 'ROL DE PAGOS'
+      const [smartflexSeleccionado, setSmartflexSeleccionado] = useState(FALLBACK_EQUIPOS[0].codigo_smartflex);
+      const [codigoPlanSeleccionado, setCodigoPlanSeleccionado] = useState(FALLBACK_PLANES[1].codigo);
+      const [abono, setAbono] = useState(0);
+      const [plazo, setPlazo] = useState(12);
+
+      // Estados de Filtros del Catálogo
+      const [busqueda, setBusqueda] = useState("");
+      const [filtroMarca, setFiltroMarca] = useState("TODAS");
+      const [filtroGama, setFiltroGama] = useState("TODAS");
+
+      // Carga automática desde Google Sheets vía Opensheet API
+      useEffect(() => {
+        if (!SHEET_ID || SHEET_ID === "TU_SHEET_ID_AQUI") return;
+
+        async function cargarGoogleSheets() {
+          setLoading(true);
+          try {
+            const [resEq, resPl, resPa] = await Promise.all([
+              fetch(`https://opensheet.elk.sh/${SHEET_ID}/equipos`).then(r => r.json()),
+              fetch(`https://opensheet.elk.sh/${SHEET_ID}/planes`).then(r => r.json()),
+              fetch(`https://opensheet.elk.sh/${SHEET_ID}/parametros`).then(r => r.json())
+            ]);
+
+            if (Array.isArray(resEq) && resEq.length > 0) {
+              const eqLimpios = resEq
+                .filter(e => String(e.activo || "SI").toUpperCase() === "SI" && e.modelo)
+                .map(e => ({
+                  ...e,
+                  pvp_prepago_sin_iva: parseFloat(String(e.pvp_prepago_sin_iva).replace(",", ".")) || 0,
+                  pvp_pospago_sin_iva: parseFloat(String(e.pvp_pospago_sin_iva).replace(",", ".")) || 0,
+                  pvp_empresa_sin_iva: parseFloat(String(e.pvp_empresa_sin_iva).replace(",", ".")) || 0,
+                }));
+              setEquipos(eqLimpios);
+              if (eqLimpios[0]) setSmartflexSeleccionado(eqLimpios[0].codigo_smartflex);
+            }
+
+            if (Array.isArray(resPl) && resPl.length > 0) {
+              const plLimpios = resPl
+                .filter(p => p.plan)
+                .map(p => ({
+                  ...p,
+                  tarifa: parseFloat(String(p.tarifa).replace(",", ".")) || 0,
+                  cbm: parseFloat(String(p.cbm).replace(",", ".")) || 0,
+                }));
+              setPlanes(plLimpios);
+              if (plLimpios[0]) setCodigoPlanSeleccionado(plLimpios[0].codigo);
+            }
+
+            if (Array.isArray(resPa) && resPa.length > 0) {
+              const mapParams = {};
+              resPa.forEach(item => {
+                if (item.clave) mapParams[item.clave.trim()] = item.valor;
+              });
+              setParams({
+                vigencia: mapParams.vigencia || FALLBACK_PARAMS.vigencia,
+                tasa_regular: parseFloat(mapParams.tasa_regular) || FALLBACK_PARAMS.tasa_regular,
+                tasa_diners: parseFloat(mapParams.tasa_diners) || FALLBACK_PARAMS.tasa_diners,
+                iva: parseFloat(mapParams.iva) || FALLBACK_PARAMS.iva,
+              });
+            }
+
+            setFuenteDatos("GOOGLE SHEETS EN VIVO");
+          } catch (err) {
+            console.error("Error cargando Google Sheets, usando respaldo local:", err);
+          } finally {
+            setLoading(false);
+          }
+        }
+
+        cargarGoogleSheets();
+      }, []);
+
+      // Sincronizar plan por defecto al cambiar tipo de cliente
+      useEffect(() => {
+        const planesFiltrados = planes.filter(p => String(p.tipo).toUpperCase() === cliente);
+        if (planesFiltrados.length > 0 && !planesFiltrados.some(p => p.codigo === codigoPlanSeleccionado)) {
+          setCodigoPlanSeleccionado(planesFiltrados[0].codigo);
+        }
+      }, [cliente, planes]);
+
+      // Equipo y Plan activos en el cotizador
+      const equipoActual = useMemo(
+        () => equipos.find(e => String(e.codigo_smartflex) === String(smartflexSeleccionado)) || equipos[0],
+        [equipos, smartflexSeleccionado]
+      );
+
+      const planesDisponibles = useMemo(
+        () => planes.filter(p => String(p.tipo).toUpperCase() === cliente),
+        [planes, cliente]
+      );
+
+      const planActual = useMemo(
+        () => planesDisponibles.find(p => String(p.codigo) === String(codigoPlanSeleccionado)) || planesDisponibles[0] || { tarifa: 0, cbm: 0, plan: "N/A" },
+        [planesDisponibles, codigoPlanSeleccionado]
+      );
+
+      // =========================================================================
+      // MOTOR DE CÁLCULO FINANCIERO (EQUIVALENTE EXACTO A COTIZADOR REGULAR & DINERS)
+      // =========================================================================
+      const resultadoCotizacion = useMemo(() => {
+        if (!equipoActual) return null;
+
+        const esDiners = modalidadCotizador === "DINERS";
+        const iva = Number(params.iva) || 0.15;
+        const tasaAnual = esDiners ? Number(params.tasa_diners) : Number(params.tasa_regular);
+        const interesMensual = Math.pow(tasaAnual / 100 + 1, 1 / 12) - 1;
+
+        // 1. Determinación del PVP sin IVA según cliente y modalidad
+        let precioSinIva = equipoActual.pvp_pospago_sin_iva;
+        if (!esDiners && cliente === "MASIVO" && tipoVenta === "ROL DE PAGOS") {
+          precioSinIva = equipoActual.pvp_prepago_sin_iva;
+        } else if (cliente === "CORPORATIVO") {
+          precioSinIva = equipoActual.pvp_empresa_sin_iva;
+        }
+
+        // 2. Precio con IVA y descuentos (Abono + CBM Corporativo)
+        const precioConIva = precioSinIva * (1 + iva);
+        const abonoNum = Math.max(0, Number(abono) || 0);
+        const descuentoCbm = esDiners ? 0 : (Number(planActual.tarifa) * Number(planActual.cbm));
+        const saldoFinanciar = Math.max(0, precioConIva - abonoNum - descuentoCbm);
+
+        // 3. Cuota mensual del equipo (con IVA) - Regla > 6 meses con interés
+        let cuotaEquipoConIva = 0;
+        if (plazo > 6) {
+          const factor = Math.pow(1 + interesMensual, plazo);
+          cuotaEquipoConIva = Number(((saldoFinanciar * interesMensual * factor) / (factor - 1)).toFixed(2));
+        } else {
+          cuotaEquipoConIva = Number((saldoFinanciar / plazo).toFixed(2));
+        }
+
+        // 4. Desglose completo
+        const cuotaEquipoSinIva = cuotaEquipoConIva / (1 + iva);
+        const planConIva = Number(planActual.tarifa) * (1 + iva);
+        const cuotaTotalSinIva = cuotaEquipoSinIva + Number(planActual.tarifa);
+        const cuotaTotalConIva = cuotaEquipoConIva + planConIva;
+        const totalFrdi = plazo > 6 ? Number((cuotaEquipoConIva * plazo).toFixed(2)) : saldoFinanciar;
+
+        return {
+          gama: calcularGama(equipoActual.pvp_pospago_sin_iva),
+          tasaAnual,
+          interesMensual: (interesMensual * 100).toFixed(4),
+          precioSinIva,
+          precioConIva,
+          descuentoCbm,
+          saldoFinanciar,
+          cuotaEquipoSinIva,
+          cuotaEquipoConIva,
+          planConIva,
+          cuotaTotalSinIva,
+          cuotaTotalConIva,
+          totalFrdi
+        };
+      }, [equipoActual, planActual, modalidadCotizador, cliente, tipoVenta, abono, plazo, params]);
+
+      // Filtros de Catálogo
+      const marcasUnicas = useMemo(() => ["TODAS", ...new Set(equipos.map(e => e.marca))], [equipos]);
+      const equiposFiltrados = useMemo(() => {
+        return equipos.filter(eq => {
+          const gamaEq = calcularGama(eq.pvp_pospago_sin_iva);
+          const matchTexto = eq.modelo.toLowerCase().includes(busqueda.toLowerCase()) ||
+                             String(eq.codigo_smartflex).includes(busqueda) ||
+                             String(eq.codigo_sap).includes(busqueda);
+          const matchMarca = filtroMarca === "TODAS" || eq.marca === filtroMarca;
+          const matchGama = filtroGama === "TODAS" || gamaEq === filtroGama;
+          return matchTexto && matchMarca && matchGama;
+        });
+      }, [equipos, busqueda, filtroMarca, filtroGama]);
+
+      return (
+        <div className="min-h-screen flex flex-col">
+          {/* CABECERA */}
+          <header className="bg-blue-900 text-white shadow-md">
+            <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight">
+                  Catálogo & Cotizador de Terminales
+                </h1>
+                <p className="text-blue-200 text-sm">
+                  Vigencia: <span className="font-semibold text-white">{params.vigencia}</span> • IVA: {(params.iva * 100).toFixed(0)}%
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={`text-xs px-3 py-1 rounded-full font-medium ${fuenteDatos.includes("LIVE") || fuenteDatos.includes("VIVO") ? "bg-emerald-500/20 text-emerald-200 border border-emerald-400/30" : "bg-amber-500/20 text-amber-200 border border-amber-400/30"}`}>
+                  {loading ? "Sincronizando..." : fuenteDatos}
+                </span>
+              </div>
+            </div>
+
+            {/* NAVEGACIÓN */}
+            <div className="bg-blue-950/60 border-t border-blue-800">
+              <div className="max-w-7xl mx-auto px-4 flex space-x-2 overflow-x-auto">
+                {[
+                  { id: "cotizador", label: "Cotizador de Equipos" },
+                  { id: "catalogo", label: `Lista de Precios (${equipos.length})` },
+                  { id: "planes", label: `Planes Autorizados (${planes.length})` }
+                ].map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => setTab(item.id)}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                      tab === item.id
+                        ? "border-cyan-400 text-white"
+                        : "border-transparent text-blue-300 hover:text-white"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </header>
+
+          {/* CONTENIDO PRINCIPAL */}
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
+            
+            {/* ================= PESTAÑA 1: COTIZADOR ================= */}
+            {tab === "cotizador" && resultadoCotizacion && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* PANEL IZQUIERDO: PARÁMETROS DE ENTRADA */}
+                <div className="lg:col-span-7 bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-4">
+                    <h2 className="text-lg font-bold text-slate-800">Configuración de Cotización</h2>
+                    <div className="inline-flex rounded-lg bg-slate-100 p-1">
+                      <button
+                        onClick={() => setModalidadCotizador("REGULAR")}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${modalidadCotizador === "REGULAR" ? "bg-blue-700 text-white shadow" : "text-slate-600"}`}
+                      >
+                        Cotizador Regular ({params.tasa_regular}%)
+                      </button>
+                      <button
+                        onClick={() => setModalidadCotizador("DINERS")}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${modalidadCotizador === "DINERS" ? "bg-indigo-700 text-white shadow" : "text-slate-600"}`}
+                      >
+                        Tarjeta Diners ({params.tasa_diners}%)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tipo de Cliente y Tipo de Venta */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">Tipo de Cliente</label>
+                      <select
+                        value={cliente}
+                        onChange={e => setCliente(e.target.value)}
+                        className="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                      >
+                        <option value="MASIVO">MASIVO</option>
+                        <option value="CORPORATIVO">CORPORATIVO</option>
+                      </select>
+                    </div>
+
+                    {modalidadCotizador === "REGULAR" && (
+                      <div>
+                        <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">Tipo de Venta</label>
+                        <select
+                          value={tipoVenta}
+                          onChange={e => setTipoVenta(e.target.value)}
+                          disabled={cliente === "CORPORATIVO"}
+                          className="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm bg-white disabled:bg-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                          <option value="DIFERIDO CNT">DIFERIDO CNT (PVP Pospago)</option>
+                          <option value="ROL DE PAGOS">ROL DE PAGOS (PVP Prepago)</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Selección de Equipo */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">Equipo Terminal</label>
+                    <select
+                      value={smartflexSeleccionado}
+                      onChange={e => setSmartflexSeleccionado(e.target.value)}
+                      className="w-full rounded-lg border-slate-300 border px-3 py-2.5 text-sm font-medium bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                      {equipos.map(eq => (
+                        <option key={eq.codigo_smartflex} value={eq.codigo_smartflex}>
+                          [{eq.codigo_smartflex}] {eq.modelo} — ({eq.tecnologia})
+                        </option>
+                      ))}
+                    </select>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                      <span className="bg-slate-100 px-2.5 py-1 rounded text-slate-600">SAP: <b>{equipoActual.codigo_sap}</b></span>
+                      <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded font-semibold">Gama: {resultadoCotizacion.gama}</span>
+                      <span className="bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded font-semibold">{equipoActual.observacion}</span>
+                    </div>
+                  </div>
+
+                  {/* Selección de Plan */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">Plan Tarifario ({cliente})</label>
+                    <select
+                      value={codigoPlanSeleccionado}
+                      onChange={e => setCodigoPlanSeleccionado(e.target.value)}
+                      className="w-full rounded-lg border-slate-300 border px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                      {planesDisponibles.map(pl => (
+                        <option key={pl.codigo} value={pl.codigo}>
+                          [{pl.codigo}] {pl.plan} — Tarifa: {formatCurrency(pl.tarifa)} + IVA {pl.cbm > 0 ? `(CBM: ${pl.cbm})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Abono Inicial y Plazo */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">Abono Inicial (USD inc. IVA)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={abono}
+                        onChange={e => setAbono(e.target.value)}
+                        className="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">Plazo en Meses</label>
+                      <select
+                        value={plazo}
+                        onChange={e => setPlazo(Number(e.target.value))}
+                        className="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm font-semibold bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                      >
+                        {[3, 6, 9, 12, 18, 24].map(m => (
+                          <option key={m} value={m}>
+                            {m} meses {m <= 6 ? "(Sin intereses)" : `(Con tasa ${resultadoCotizacion.tasaAnual}%)`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* PANEL DERECHO: RESULTADOS FINANCIEROS */}
+                <div className="lg:col-span-5 space-y-4">
+                  <div className="bg-gradient-to-br from-blue-900 to-slate-900 text-white rounded-xl shadow-md p-6">
+                    <div className="text-xs uppercase tracking-wider text-blue-300 font-semibold">
+                      Cuota Mensual Total (Equipo + Plan)
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <span className="text-4xl font-extrabold">{formatCurrency(resultadoCotizacion.cuotaTotalConIva)}</span>
+                      <span className="text-sm text-blue-200">/ mes inc. IVA</span>
+                    </div>
+                    <div className="text-xs text-blue-300 mt-1">
+                      Sin IVA: {formatCurrency(resultadoCotizacion.cuotaTotalSinIva)} / mes
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-white/15 grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="block text-xs text-blue-300">Cuota Equipo (inc. IVA)</span>
+                        <span className="text-lg font-bold">{formatCurrency(resultadoCotizacion.cuotaEquipoConIva)}</span>
+                      </div>
+                      <div>
+                        <span className="block text-xs text-blue-300">Tarifa Plan (inc. IVA)</span>
+                        <span className="text-lg font-bold">{formatCurrency(resultadoCotizacion.planConIva)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DESGLOSE TÉCNICO PARA EL ASESOR / FRDI */}
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-3 text-sm">
+                    <h3 className="font-bold text-slate-800 border-b pb-2">Desglose para Sistema / FRDI</h3>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">PVP Equipo (sin IVA):</span>
+                      <span className="font-medium">{formatCurrency(resultadoCotizacion.precioSinIva)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">PVP Equipo (inc. IVA):</span>
+                      <span className="font-medium">{formatCurrency(resultadoCotizacion.precioConIva)}</span>
+                    </div>
+                    {resultadoCotizacion.descuentoCbm > 0 && (
+                      <div className="flex justify-between text-emerald-700">
+                        <span>Descuento CBM ({planActual.cbm} meses):</span>
+                        <span className="font-semibold">- {formatCurrency(resultadoCotizacion.descuentoCbm)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Saldo a Financiar:</span>
+                      <span className="font-semibold">{formatCurrency(resultadoCotizacion.saldoFinanciar)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Tasa Efectiva Mensual:</span>
+                      <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">
+                        {plazo > 6 ? `${resultadoCotizacion.interesMensual}%` : "0.00% (<= 6 meses)"}
+                      </span>
+                    </div>
+                    <div className="pt-2 border-t flex justify-between items-center bg-amber-50 -mx-2 px-3 py-2 rounded-lg">
+                      <span className="font-bold text-amber-900">Valor Total a ingresar en FRDI:</span>
+                      <span className="font-extrabold text-amber-900 text-base">{formatCurrency(resultadoCotizacion.totalFrdi)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ================= PESTAÑA 2: CATÁLOGO DE EQUIPOS ================= */}
+            {tab === "catalogo" && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b bg-slate-50 flex flex-col md:flex-row gap-3 justify-between">
+                  <input
+                    type="text"
+                    placeholder="Buscar por modelo, Smartflex o código SAP..."
+                    value={busqueda}
+                    onChange={e => setBusqueda(e.target.value)}
+                    className="w-full md:w-80 rounded-lg border-slate-300 border px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <select
+                      value={filtroMarca}
+                      onChange={e => setFiltroMarca(e.target.value)}
+                      className="rounded-lg border-slate-300 border px-3 py-2 text-sm bg-white"
+                    >
+                      {marcasUnicas.map(m => <option key={m} value={m}>Marca: {m}</option>)}
+                    </select>
+                    <select
+                      value={filtroGama}
+                      onChange={e => setFiltroGama(e.target.value)}
+                      className="rounded-lg border-slate-300 border px-3 py-2 text-sm bg-white"
+                    >
+                      {["TODAS", "MUY BAJA", "BAJA", "MEDIA", "ALTA", "PREMIUM"].map(g => (
+                        <option key={g} value={g}>Gama: {g}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-600 text-xs uppercase border-b">
+                        <th className="py-3 px-4">Smartflex / SAP</th>
+                        <th className="py-3 px-4">Modelo / Marca</th>
+                        <th className="py-3 px-4">Gama</th>
+                        <th className="py-3 px-4 text-right">Prepago (inc. IVA)</th>
+                        <th className="py-3 px-4 text-right">Pospago (inc. IVA)</th>
+                        <th className="py-3 px-4 text-right">Empresa (sin IVA)</th>
+                        <th className="py-3 px-4">Estado</th>
+                        <th className="py-3 px-4 text-center">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {equiposFiltrados.map(eq => {
+                        const iva = Number(params.iva) || 0.15;
+                        const gama = calcularGama(eq.pvp_pospago_sin_iva);
+                        return (
+                          <tr key={eq.codigo_smartflex} className="hover:bg-blue-50/50">
+                            <td className="py-3 px-4 font-mono text-xs">
+                              <div className="font-bold text-slate-800">{eq.codigo_smartflex}</div>
+                              <div className="text-slate-400">{eq.codigo_sap}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="font-semibold text-slate-900">{eq.modelo}</div>
+                              <div className="text-xs text-slate-500">{eq.marca} • {eq.tecnologia}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="px-2 py-0.5 text-xs font-semibold rounded bg-slate-100 text-slate-700">{gama}</span>
+                            </td>
+                            <td className="py-3 px-4 text-right font-medium">{formatCurrency(eq.pvp_prepago_sin_iva * (1 + iva))}</td>
+                            <td className="py-3 px-4 text-right font-bold text-blue-800">{formatCurrency(eq.pvp_pospago_sin_iva * (1 + iva))}</td>
+                            <td className="py-3 px-4 text-right text-slate-600">{formatCurrency(eq.pvp_empresa_sin_iva)}</td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${eq.observacion.includes("NUEVO") ? "bg-emerald-100 text-emerald-800" : "bg-blue-100 text-blue-800"}`}>
+                                {eq.observacion}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <button
+                                onClick={() => {
+                                  setSmartflexSeleccionado(eq.codigo_smartflex);
+                                  setTab("cotizador");
+                                }}
+                                className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+                              >
+                                Cotizar
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ================= PESTAÑA 3: PLANES AUTORIZADOS ================= */}
+            {tab === "planes" && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-600 text-xs uppercase border-b">
+                        <th className="py-3 px-4">Código</th>
+                        <th className="py-3 px-4">Nombre del Plan</th>
+                        <th className="py-3 px-4">Segmento</th>
+                        <th className="py-3 px-4 text-right">Tarifa sin IVA</th>
+                        <th className="py-3 px-4 text-right">Tarifa inc. IVA</th>
+                        <th className="py-3 px-4 text-center">CBM</th>
+                        <th className="py-3 px-4">Observaciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {planes.map((pl, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="py-3 px-4 font-mono text-xs font-bold">{pl.codigo}</td>
+                          <td className="py-3 px-4 font-semibold text-slate-800">{pl.plan}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-0.5 text-xs font-semibold rounded ${pl.tipo === "CORPORATIVO" ? "bg-purple-100 text-purple-800" : "bg-sky-100 text-sky-800"}`}>
+                              {pl.tipo}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">{formatCurrency(pl.tarifa)}</td>
+                          <td className="py-3 px-4 text-right font-bold text-slate-900">{formatCurrency(pl.tarifa * (1 + Number(params.iva)))}</td>
+                          <td className="py-3 px-4 text-center font-semibold">{pl.cbm}</td>
+                          <td className="py-3 px-4 text-slate-500 text-xs">{pl.observaciones}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+          </main>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
