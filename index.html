@@ -36,9 +36,8 @@
       const [loading, setLoading] = useState(true);
       const [estadoConexion, setEstadoConexion] = useState({ ok: false, texto: "SINCRONIZANDO..." });
 
-      // Estados inicialmente vacíos: SOLO se llenan desde Google Sheets
       const [params, setParams] = useState({
-        vigencia: "Sin definir en hoja 'parametros'",
+        vigencia: "Cargando...",
         tasa_regular: 15.79,
         tasa_diners: 8.25,
         iva: 0.15
@@ -63,12 +62,11 @@
       async function cargarGoogleSheets() {
         setLoading(true);
         try {
-          // Timestamp anti-caché para traer siempre el último cambio del Sheet
-          const t = Date.now();
+          // URLs limpias sin parámetros extra (opensheet solo admite URL limpia)
           const [resEq, resPl, resPa] = await Promise.all([
-            fetch(`https://opensheet.elk.sh/${SHEET_ID}/equipos?t=${t}`).then(r => r.json()),
-            fetch(`https://opensheet.elk.sh/${SHEET_ID}/planes?t=${t}`).then(r => r.json()),
-            fetch(`https://opensheet.elk.sh/${SHEET_ID}/parametros?t=${t}`).then(r => r.json())
+            fetch(`https://opensheet.elk.sh/${SHEET_ID}/equipos`, { cache: "no-store" }).then(r => r.json()),
+            fetch(`https://opensheet.elk.sh/${SHEET_ID}/planes`, { cache: "no-store" }).then(r => r.json()),
+            fetch(`https://opensheet.elk.sh/${SHEET_ID}/parametros`, { cache: "no-store" }).then(r => r.json())
           ]);
 
           if (resEq.error || resPl.error || resPa.error) {
