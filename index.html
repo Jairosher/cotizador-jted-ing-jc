@@ -15,8 +15,44 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    // ID limpio de tu Google Sheet "Cotizador JTED"
+    // ID de tu Google Sheet "Cotizador JTED"
     const SHEET_ID = "1sxgV7kpbdx2y4BoJKfeF7Fu8CPrvmKZO9YqFiJhgyqg";
+
+    // Lector directo oficial de Google Sheets (sin intermediarios)
+    async function leerPestanaGoogleSheet(sheetName) {
+      const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status} al leer ${sheetName}`);
+      const text = await res.text();
+      // Extraer el JSON limpio de la respuesta de Google Visualization
+      const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\);/);
+      if (!match) throw new Error(`Formato inesperado en ${sheetName}. Verifica que sea público.`);
+      const json = JSON.parse(match[1]);
+      if (json.status === "error") {
+        throw new Error(json.errors?.[0]?.detailed_message || `Error en pestaña ${sheetName}`);
+      }
+
+      const cols = json.table.cols.map(c => (c.label || "").trim());
+      const rows = json.table.rows || [];
+
+      return rows.map(r => {
+        const obj = {};
+        cols.forEach((colName, idx) => {
+          if (!colName) return;
+          const cell = r.c[idx];
+          // Preferir valor crudo (v) para números, o formateado (f) para textos/códigos
+          obj[colName] = cell ? (cell.v !== null && cell.v !== undefined ? cell.v : (cell.f || "")) : "";
+        });
+        return obj;
+      });
+    }
+
+    function limpiarNumero(val) {
+      if (typeof val === "number") return val;
+      if (!val) return 0;
+      const limpio = String(val).replace(/[$,\s]/g, "");
+      return parseFloat(limpio) || 0;
+    }
 
     function calcularGama(pvpPospago) {
       const p = Number(pvpPospago) || 0;
@@ -62,60 +98,49 @@
       async function cargarGoogleSheets() {
         setLoading(true);
         try {
-          // URLs limpias sin parámetros extra (opensheet solo admite URL limpia)
           const [resEq, resPl, resPa] = await Promise.all([
-            fetch(`https://opensheet.elk.sh/${SHEET_ID}/equipos`, { cache: "no-store" }).then(r => r.json()),
-            fetch(`https://opensheet.elk.sh/${SHEET_ID}/planes`, { cache: "no-store" }).then(r => r.json()),
-            fetch(`https://opensheet.elk.sh/${SHEET_ID}/parametros`, { cache: "no-store" }).then(r => r.json())
+            leerPestanaGoogleSheet("equipos"),
+            leerPestanaGoogleSheet("planes"),
+            leerPestanaGoogleSheet("parametros")
           ]);
 
-          if (resEq.error || resPl.error || resPa.error) {
-            setEstadoConexion({
-              ok: false,
-              texto: `ERROR SHEET: ${resEq.error || resPl.error || resPa.error}`
-            });
-            setEquipos([]);
-            setPlanes([]);
-            return;
-          }
+          const eqLimpios = resEq
+            .filter(e => String(e.activo || "SI").toUpperCase().trim() === "SI" && e.modelo)
+            .map(e => ({
+              ...e,
+              codigo_smartflex: String(e.codigo_smartflex).trim(),
+              codigo_sap: String(e.codigo_sap).trim(),
+              pvp_prepago_sin_iva: limpiarNumero(e.pvp_prepago_sin_iva),
+              pvp_pospago_sin_iva: limpiarNumero(e.pvp_pospago_sin_iva),
+              pvp_empresa_sin_iva: limpiarNumero(e.pvp_empresa_sin_iva),
+            }));
 
-          const eqLimpios = Array.isArray(resEq)
-            ? resEq
-                .filter(e => String(e.activo || "SI").toUpperCase() === "SI" && e.modelo)
-                .map(e => ({
-                  ...e,
-                  pvp_prepago_sin_iva: parseFloat(String(e.pvp_prepago_sin_iva).replace(",", ".")) || 0,
-                  pvp_pospago_sin_iva: parseFloat(String(e.pvp_pospago_sin_iva).replace(",", ".")) || 0,
-                  pvp_empresa_sin_iva: parseFloat(String(e.pvp_empresa_sin_iva).replace(",", ".")) || 0,
-                }))
-            : [];
-
-          const plLimpios = Array.isArray(resPl)
-            ? resPl
-                .filter(p => p.plan)
-                .map(p => ({
-                  ...p,
-                  tarifa: parseFloat(String(p.tarifa).replace(",", ".")) || 0,
-                  cbm: parseFloat(String(p.cbm).replace(",", ".")) || 0,
-                }))
-            : [];
+          const plLimpios = resPl
+            .filter(p => p.plan)
+            .map((p, i) => ({
+              ...p,
+              uid: `${p.codigo}-${i}`,
+              codigo: String(p.codigo).trim(),
+              tarifa: limpiarNumero(p.tarifa),
+              cbm: limpiarNumero(p.cbm),
+            }));
 
           setEquipos(eqLimpios);
           setPlanes(plLimpios);
 
           if (eqLimpios.length > 0) setSmartflexSeleccionado(eqLimpios[0].codigo_smartflex);
-          if (plLimpios.length > 0) setCodigoPlanSeleccionado(plLimpios[0].codigo);
+          if (plLimpios.length > 0) setCodigoPlanSeleccionado(plLimpios[0].uid);
 
-          if (Array.isArray(resPa) && resPa.length > 0) {
+          if (resPa.length > 0) {
             const mapParams = {};
             resPa.forEach(item => {
-              if (item.clave) mapParams[item.clave.trim()] = item.valor;
+              if (item.clave) mapParams[String(item.clave).trim()] = item.valor;
             });
             setParams(prev => ({
               vigencia: mapParams.vigencia || prev.vigencia,
-              tasa_regular: parseFloat(mapParams.tasa_regular) || prev.tasa_regular,
-              tasa_diners: parseFloat(mapParams.tasa_diners) || prev.tasa_diners,
-              iva: parseFloat(mapParams.iva) || prev.iva,
+              tasa_regular: limpiarNumero(mapParams.tasa_regular) || prev.tasa_regular,
+              tasa_diners: limpiarNumero(mapParams.tasa_diners) || prev.tasa_diners,
+              iva: limpiarNumero(mapParams.iva) || prev.iva,
             }));
           }
 
@@ -125,7 +150,7 @@
           });
         } catch (err) {
           console.error(err);
-          setEstadoConexion({ ok: false, texto: "ERROR DE RED O PERMISOS EN GOOGLE SHEETS" });
+          setEstadoConexion({ ok: false, texto: `ERROR: ${err.message}` });
         } finally {
           setLoading(false);
         }
@@ -136,24 +161,24 @@
       }, []);
 
       useEffect(() => {
-        const planesFiltrados = planes.filter(p => String(p.tipo).toUpperCase() === cliente);
-        if (planesFiltrados.length > 0 && !planesFiltrados.some(p => String(p.codigo) === String(codigoPlanSeleccionado))) {
-          setCodigoPlanSeleccionado(planesFiltrados[0].codigo);
+        const planesFiltrados = planes.filter(p => String(p.tipo).toUpperCase().trim() === cliente);
+        if (planesFiltrados.length > 0 && !planesFiltrados.some(p => p.uid === codigoPlanSeleccionado)) {
+          setCodigoPlanSeleccionado(planesFiltrados[0].uid);
         }
       }, [cliente, planes]);
 
       const equipoActual = useMemo(
-        () => equipos.find(e => String(e.codigo_smartflex) === String(smartflexSeleccionado)) || equipos[0] || null,
+        () => equipos.find(e => e.codigo_smartflex === smartflexSeleccionado) || equipos[0] || null,
         [equipos, smartflexSeleccionado]
       );
 
       const planesDisponibles = useMemo(
-        () => planes.filter(p => String(p.tipo).toUpperCase() === cliente),
+        () => planes.filter(p => String(p.tipo).toUpperCase().trim() === cliente),
         [planes, cliente]
       );
 
       const planActual = useMemo(
-        () => planesDisponibles.find(p => String(p.codigo) === String(codigoPlanSeleccionado)) || planesDisponibles[0] || { tarifa: 0, cbm: 0, plan: "Sin plan" },
+        () => planesDisponibles.find(p => p.uid === codigoPlanSeleccionado) || planesDisponibles[0] || { tarifa: 0, cbm: 0, plan: "Sin plan" },
         [planesDisponibles, codigoPlanSeleccionado]
       );
 
@@ -213,8 +238,8 @@
         return equipos.filter(eq => {
           const gamaEq = calcularGama(eq.pvp_pospago_sin_iva);
           const matchTexto = eq.modelo.toLowerCase().includes(busqueda.toLowerCase()) ||
-                             String(eq.codigo_smartflex).includes(busqueda) ||
-                             String(eq.codigo_sap).includes(busqueda);
+                             eq.codigo_smartflex.includes(busqueda) ||
+                             eq.codigo_sap.includes(busqueda);
           const matchMarca = filtroMarca === "TODAS" || eq.marca === filtroMarca;
           const matchGama = filtroGama === "TODAS" || gamaEq === filtroGama;
           return matchTexto && matchMarca && matchGama;
@@ -269,15 +294,6 @@
           </header>
 
           <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
-            {!loading && equipos.length === 0 && (
-              <div className="bg-white border border-amber-300 rounded-xl p-6 text-center max-w-xl mx-auto my-8 shadow-sm">
-                <h2 className="text-lg font-bold text-slate-800">No hay equipos cargados desde Google Sheets</h2>
-                <p className="text-sm text-slate-600 mt-2">
-                  Verifica que tu hoja <b>Cotizador JTED</b> esté compartida como <b>"Cualquier persona con el enlace (Lector)"</b> y que la pestaña <b>equipos</b> tenga datos debajo de los encabezados en la Fila 1.
-                </p>
-              </div>
-            )}
-
             {tab === "cotizador" && resultadoCotizacion && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-7 bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
@@ -356,7 +372,7 @@
                       className="w-full rounded-lg border-slate-300 border px-3 py-2.5 text-sm bg-white"
                     >
                       {planesDisponibles.map(pl => (
-                        <option key={pl.codigo} value={pl.codigo}>
+                        <option key={pl.uid} value={pl.uid}>
                           [{pl.codigo}] {pl.plan} — Tarifa: {formatCurrency(pl.tarifa)} + IVA {pl.cbm > 0 ? `(CBM: ${pl.cbm})` : ""}
                         </option>
                       ))}
@@ -558,8 +574,8 @@
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {planes.map((pl, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50">
+                      {planes.map((pl) => (
+                        <tr key={pl.uid} className="hover:bg-slate-50">
                           <td className="py-3 px-4 font-mono text-xs font-bold">{pl.codigo}</td>
                           <td className="py-3 px-4 font-semibold text-slate-800">{pl.plan}</td>
                           <td className="py-3 px-4">
